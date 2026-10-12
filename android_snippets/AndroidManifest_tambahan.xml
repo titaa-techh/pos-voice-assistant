@@ -1,0 +1,12 @@
+<!-- Tambahkan ke android/app/src/main/AndroidManifest.xml -->
+
+<!-- 1) Di dalam <manifest ...> tetapi di luar <application>: -->
+<uses-permission android:name="android.permission.RECORD_AUDIO"/>
+<uses-permission android:name="android.permission.INTERNET"/>
+
+<!-- 2) Masih di dalam <manifest>, di luar <application> (Android 11 ke atas): -->
+<queries>
+    <intent>
+        <action android:name="android.speech.RecognitionService"/>
+    </intent>
+</queries>

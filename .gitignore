@@ -1,0 +1,15 @@
+# Flutter / Dart
+.dart_tool/
+.packages
+build/
+*.iml
+.idea/
+.vscode/
+
+# Rahasia dan konfigurasi Firebase (buat sendiri dengan flutterfire configure)
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
+lib/firebase_options.dart
+*.jks
+key.properties
+firebase-debug.log
