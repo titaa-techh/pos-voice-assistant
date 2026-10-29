@@ -45,6 +45,28 @@ class CartNotifier extends Notifier<List<CartItem>> {
     _set(next);
   }
 
+  /// Dipanggil saat produk dihapus.
+  void removeProduct(String productId) {
+    _set(state.where((e) => e.productId != productId).toList());
+  }
+
+  /// Dipanggil saat produk diubah: nama dan harga mengikuti data terbaru,
+  /// jumlah dibatasi sebesar stok baru.
+  void syncProduct(ProductModel p) {
+    final next = <CartItem>[];
+    for (final e in state) {
+      if (e.productId != p.id) {
+        next.add(e);
+        continue;
+      }
+      final q = e.quantity > p.stock ? p.stock : e.quantity;
+      if (q > 0) {
+        next.add(CartItem(productId: p.id, name: p.name, price: p.price, quantity: q));
+      }
+    }
+    _set(next);
+  }
+
   Future<void> clear() async {
     state = [];
     await _box.clear();

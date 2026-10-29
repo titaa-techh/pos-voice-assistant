@@ -59,6 +59,11 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
                       title: Text(p.name),
                       subtitle: Text(
                           '${rupiah(p.price)} · ${p.stock == 0 ? 'Habis' : 'stok ${p.stock}'}'),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => ProductFormPage(product: p)),
+                      ),
                       trailing: IconButton(
                         tooltip: 'Tambah ke keranjang',
                         icon: const Icon(Icons.add_shopping_cart),
@@ -74,6 +79,11 @@ class _ProductListPageState extends ConsumerState<ProductListPage> {
                     );
                   },
                 ),
+        ),
+        const Padding(
+          padding: EdgeInsets.all(8),
+          child: Text('Ketuk nama produk untuk mengubah atau menghapus.',
+              style: TextStyle(fontSize: 12)),
         ),
       ]),
     );

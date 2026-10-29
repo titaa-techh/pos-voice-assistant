@@ -23,23 +23,79 @@ class _VoiceSheetState extends ConsumerState<VoiceSheet> {
   final _voice = VoiceService();
   final _text = TextEditingController();
   bool _listening = false;
+  bool _matched = false;
+  String? _error;
   List<MapEntry<ProductModel, int>> _ranked = [];
 
   void _snack(String m) =>
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
 
-  Future<void> _listen() async {
-    setState(() => _listening = true);
-    final ok = await _voice.listen(onResult: (t) {
+  String _friendly(String code) {
+    final c = code.toLowerCase();
+    if (c.contains('no_match') || c.contains('no-speech') || c.contains('no_speech')) {
+      return 'Suara tidak terdengar. Bicara lebih dekat ke mikrofon, lalu jeda 1 sampai 2 detik setelah selesai.';
+    }
+    if (c.contains('not-allowed') || c.contains('permission')) {
+      return 'Izin mikrofon ditolak. Klik ikon gembok di address bar, izinkan Mikrofon, lalu muat ulang.';
+    }
+    if (c.contains('network')) {
+      return 'Pengenalan suara di Chrome memerlukan koneksi internet.';
+    }
+    if (c.contains('audio') || c.contains('capture')) {
+      return 'Mikrofon tidak ditemukan atau sedang dipakai aplikasi lain.';
+    }
+    return 'Galat suara: $code';
+  }
+
+  void _onStatus(String status) {
+    if (!mounted) return;
+    if (status == 'done' || status == 'notListening') {
+      setState(() => _listening = false);
+      final t = _text.text.trim();
+      if (t.isEmpty && _error == null) {
+        setState(() => _error =
+            'Suara tidak terdengar. Bicara lebih dekat ke mikrofon, lalu jeda 1 sampai 2 detik setelah selesai.');
+      } else if (t.isNotEmpty && !_matched) {
+        _match(t);
+      }
+    }
+  }
+
+  void _onError(String code) {
+    if (!mounted) return;
+    setState(() {
+      _listening = false;
+      _error = _friendly(code);
+    });
+  }
+
+  Future<void> _toggleListen() async {
+    if (_listening) {
+      await _voice.stop();
+      return;
+    }
+    final err = await _voice.init(onStatus: _onStatus, onError: _onError);
+    if (!mounted) return;
+    if (err != null) {
+      setState(() => _error = err);
+      return;
+    }
+    setState(() {
+      _listening = true;
+      _matched = false;
+      _error = null;
+      _ranked = [];
+      _text.clear();
+    });
+    await _voice.listen(onResult: (t, isFinal) {
       if (!mounted) return;
       _text.text = t;
-      setState(() => _listening = false);
-      _match(t);
+      _text.selection = TextSelection.collapsed(offset: t.length);
+      if (isFinal && t.trim().isNotEmpty) {
+        setState(() => _listening = false);
+        _match(t);
+      }
     });
-    if (!ok && mounted) {
-      setState(() => _listening = false);
-      _snack('Suara tidak tersedia. Ketik nama produk.');
-    }
   }
 
   void _match(String q) {
@@ -47,6 +103,7 @@ class _VoiceSheetState extends ConsumerState<VoiceSheet> {
       _snack('Suara tidak terdengar, coba lagi.');
       return;
     }
+    _matched = true;
     setState(() => _ranked =
         rankByDistance(q, ref.read(productsProvider), (p) => p.name));
   }
@@ -62,7 +119,7 @@ class _VoiceSheetState extends ConsumerState<VoiceSheet> {
 
   @override
   void dispose() {
-    _voice.stop();
+    _voice.cancel();
     _text.dispose();
     super.dispose();
   }
@@ -71,7 +128,8 @@ class _VoiceSheetState extends ConsumerState<VoiceSheet> {
   Widget build(BuildContext context) {
     final th = ref.watch(thresholdProvider);
     final hasBest = _ranked.isNotEmpty && _ranked.first.value <= th;
-    return Padding(
+    final scheme = Theme.of(context).colorScheme;
+    return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(
           16, 0, 16, MediaQuery.of(context).viewInsets.bottom + 16),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -79,11 +137,21 @@ class _VoiceSheetState extends ConsumerState<VoiceSheet> {
         const SizedBox(height: 12),
         IconButton.filled(
           iconSize: 36,
-          tooltip: 'Mulai mendengarkan',
-          onPressed: _listening ? null : _listen,
-          icon: Icon(_listening ? Icons.hearing : Icons.mic),
+          tooltip: _listening ? 'Berhenti mendengarkan' : 'Mulai mendengarkan',
+          onPressed: _toggleListen,
+          icon: Icon(_listening ? Icons.stop : Icons.mic),
         ),
-        Text(_listening ? 'Mendengarkan...' : 'Ketuk mikrofon, atau ketik di bawah'),
+        const SizedBox(height: 4),
+        Text(_listening
+            ? 'Mendengarkan... bicara sekarang, lalu jeda sebentar'
+            : 'Ketuk mikrofon, atau ketik di bawah'),
+        if (_error != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(_error!,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: scheme.error)),
+          ),
         const SizedBox(height: 12),
         TextField(
           controller: _text,

@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import '../../cart/providers/cart_provider.dart';
 import '../models/product_model.dart';
 
 final productsProvider =
@@ -18,6 +19,31 @@ class ProductsNotifier extends Notifier<List<ProductModel>> {
     return list;
   }
 
+  /// Mengembalikan pesan galat, atau null bila semua masukan valid.
+  /// [excludeId] dipakai saat mengubah produk agar tidak bentrok dengan dirinya sendiri.
+  String? _validate({
+    String? excludeId,
+    required String name,
+    required String price,
+    required String stock,
+    required String barcode,
+  }) {
+    final n = name.trim();
+    if (n.isEmpty) return 'Nama produk wajib diisi.';
+    if (state.any((p) => p.id != excludeId && p.name.toLowerCase() == n.toLowerCase())) {
+      return 'Nama produk sudah ada.';
+    }
+    final pr = int.tryParse(price.trim());
+    if (pr == null || pr < 0) return 'Harga harus angka bulat, minimal 0.';
+    final st = int.tryParse(stock.trim());
+    if (st == null || st < 0) return 'Stok harus angka bulat, minimal 0.';
+    final bc = barcode.trim();
+    if (bc.isNotEmpty && state.any((p) => p.id != excludeId && p.barcode == bc)) {
+      return 'Barcode sudah dipakai produk lain.';
+    }
+    return null;
+  }
+
   /// Mengembalikan pesan galat, atau null bila berhasil disimpan.
   Future<String?> add({
     required String name,
@@ -26,25 +52,15 @@ class ProductsNotifier extends Notifier<List<ProductModel>> {
     String category = '',
     String barcode = '',
   }) async {
-    final n = name.trim();
-    if (n.isEmpty) return 'Nama produk wajib diisi.';
-    if (state.any((p) => p.name.toLowerCase() == n.toLowerCase())) {
-      return 'Nama produk sudah ada.';
-    }
-    final pr = int.tryParse(price.trim());
-    if (pr == null || pr < 0) return 'Harga harus angka bulat, minimal 0.';
-    final st = int.tryParse(stock.trim());
-    if (st == null || st < 0) return 'Stok harus angka bulat, minimal 0.';
-    final bc = barcode.trim();
-    if (bc.isNotEmpty && state.any((p) => p.barcode == bc)) {
-      return 'Barcode sudah dipakai produk lain.';
-    }
+    final err = _validate(name: name, price: price, stock: stock, barcode: barcode);
+    if (err != null) return err;
     final now = DateTime.now();
+    final bc = barcode.trim();
     final p = ProductModel(
       id: now.microsecondsSinceEpoch.toString(),
-      name: n,
-      price: pr,
-      stock: st,
+      name: name.trim(),
+      price: int.parse(price.trim()),
+      stock: int.parse(stock.trim()),
       category: category.trim().isEmpty ? 'Umum' : category.trim(),
       barcode: bc.isEmpty ? null : bc,
       createdAt: now,
@@ -52,6 +68,56 @@ class ProductsNotifier extends Notifier<List<ProductModel>> {
     );
     await _save(p);
     return null;
+  }
+
+  /// Mengubah produk yang sudah ada. Mengembalikan pesan galat, atau null bila berhasil.
+  Future<String?> update(
+    String id, {
+    required String name,
+    required String price,
+    required String stock,
+    String category = '',
+    String barcode = '',
+  }) async {
+    final index = state.indexWhere((p) => p.id == id);
+    if (index < 0) return 'Produk tidak ditemukan.';
+    final old = state[index];
+    final err = _validate(
+        excludeId: id, name: name, price: price, stock: stock, barcode: barcode);
+    if (err != null) return err;
+    final bc = barcode.trim();
+    final updated = ProductModel(
+      id: old.id,
+      name: name.trim(),
+      price: int.parse(price.trim()),
+      stock: int.parse(stock.trim()),
+      category: category.trim().isEmpty ? 'Umum' : category.trim(),
+      barcode: bc.isEmpty ? null : bc,
+      imageUrl: old.imageUrl,
+      createdAt: old.createdAt,
+      updatedAt: DateTime.now(),
+    );
+    await _save(updated);
+    // Samakan nama, harga, dan jumlah di keranjang dengan data terbaru.
+    ref.read(cartProvider.notifier).syncProduct(updated);
+    return null;
+  }
+
+  /// Menghapus produk dari Hive, keranjang, dan Firestore.
+  /// Riwayat transaksi lama tidak berubah karena menyimpan salinan nama dan harga.
+  Future<void> delete(String id) async {
+    await _box.delete(id);
+    state = state.where((p) => p.id != id).toList();
+    ref.read(cartProvider.notifier).removeProduct(id);
+    try {
+      await FirebaseFirestore.instance
+          .collection('products')
+          .doc(id)
+          .delete()
+          .timeout(const Duration(seconds: 5));
+    } catch (_) {
+      // Offline: produk sudah terhapus lokal; salinan cloud dibersihkan manual.
+    }
   }
 
   Future<void> decreaseStock(Map<String, int> quantities) async {
