@@ -11,7 +11,7 @@ Login (Firebase Auth), kelola produk (tambah, daftar, cari), keranjang, pembayar
 transaksi tersimpan di Hive dan disinkronkan ke Firestore, riwayat, profil.
 Perintah suara + Levenshtein (ambang 3). Tahap lanjut: dashboard, barcode, cetak struk, foto produk.
 
-## LANGKAH PENGERJAAN (urut, sekitar 45-60 menit)
+## LANGKAH PENGERJAAN 
 
 ### A. Siapkan alat
 1. Pasang Flutter SDK (flutter.dev), Android Studio, lalu jalankan `flutter doctor` sampai Android toolchain bertanda centang.
@@ -23,7 +23,7 @@ Perintah suara + Levenshtein (ambang 3). Tahap lanjut: dashboard, barcode, cetak
 flutter create pos_voice_assistant
 cd pos_voice_assistant
 ```
-Dari folder zip ini, salin ke proyek baru tadi (timpa bila ditanya):
+Dari folder zip ini, disalin ke proyek baru:
 - folder `lib/`
 - folder `test/`
 - file `pubspec.yaml`
